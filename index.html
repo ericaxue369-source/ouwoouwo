@@ -4459,7 +4459,7 @@ function BrainKnowledgeScreen({ knowledgeItems, setKnowledgeItems, onTrain }){
   const items=knowledgeItems&&knowledgeItems.length?knowledgeItems:[{id:1,title:"AI Literacy 入门课",desc:"围绕 AI 学习、使用方法和真实案例训练你的分身。",hours:0,attachments:0}];
   const create=()=>setKnowledgeItems&&setKnowledgeItems(p=>{
     const n=(p||[]).filter(k=>/^新知识\d+$/.test(k.title||"")).length+1;
-    return [{id:Date.now(),title:`新知识${n}`,desc:"点击右侧更多，可重命名、编辑描述或删除。",hours:0,attachments:0},...p];
+    return [{id:Date.now(),title:`新知识${n}`,desc:"点击右侧更多，可编辑标题和描述，或删除。",hours:0,attachments:0},...p];
   });
   const updateItem=(id,patch)=>setKnowledgeItems&&setKnowledgeItems(p=>(p||[]).map(k=>k.id===id?{...k,...patch}:k));
   const removeItem=(id)=>{setKnowledgeItems&&setKnowledgeItems(p=>(p||[]).filter(k=>k.id!==id));setMenuId(null);};
@@ -4486,7 +4486,7 @@ function BrainKnowledgeScreen({ knowledgeItems, setKnowledgeItems, onTrain }){
         React.createElement('button',{onClick:(e)=>{e.stopPropagation();setMenuId(menuId===k.id?null:k.id);},style:{width:30,height:30,borderRadius:"50%",border:"none",background:"rgba(139,92,246,.08)",color:T.purple,fontSize:18,fontWeight:900,cursor:"pointer",lineHeight:"26px"}},"...")
       ),
       menuId===k.id?React.createElement('div',{style:{position:"absolute",right:14,top:54,zIndex:10,width:132,background:"#fff",border:"1px solid rgba(139,92,246,.14)",borderRadius:16,boxShadow:"0 14px 36px rgba(30,24,60,.16)",overflow:"hidden"}},
-        [["重命名",()=>openEdit(k)],["编辑",()=>openEdit(k)],["删除",()=>removeItem(k.id)]].map(([label,fn],idx)=>React.createElement('button',{key:label,onClick:fn,style:{display:"block",width:"100%",border:"none",borderBottom:idx<2?"1px solid rgba(139,92,246,.08)":"none",background:"#fff",padding:"12px 14px",textAlign:"left",fontSize:13,fontWeight:800,color:label==="删除"?"#ef4444":T.text1,cursor:"pointer"}},label))
+        [["编辑",()=>openEdit(k)],["删除",()=>removeItem(k.id)]].map(([label,fn],idx)=>React.createElement('button',{key:label,onClick:fn,style:{display:"block",width:"100%",border:"none",borderBottom:idx<1?"1px solid rgba(139,92,246,.08)":"none",background:"#fff",padding:"12px 14px",textAlign:"left",fontSize:13,fontWeight:800,color:label==="删除"?"#ef4444":T.text1,cursor:"pointer"}},label))
       ):null,
       editing&&editing.id===k.id?React.createElement('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:12}},
         React.createElement('button',{onClick:cancelEdit,style:{border:"none",borderRadius:12,padding:"10px 0",background:"#f3f1fb",color:T.text2,fontSize:12,fontWeight:900,cursor:"pointer"}},"取消"),
