@@ -148,7 +148,14 @@ function PkuBadge({size=16}){
 function PkuName({children, verified=false, size=16, weight=700}){
   return React.createElement('span',{style:{display:"inline-flex",alignItems:"center",gap:6,minWidth:0}},
     React.createElement('span',{style:{fontSize:size,fontWeight:weight,color:T.text1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},children),
-    verified?React.createElement(PkuBadge,{size:Math.max(24,Math.round(size*1.65))}):null
+    verified?React.createElement(PkuBadge,{size:Math.max(32,Math.round(size*2.05))}):null
+  );
+}
+function PkuOfficialName({children, size=16, weight=700}){
+  return React.createElement('span',{style:{display:"inline-flex",alignItems:"center",gap:6,minWidth:0}},
+    React.createElement('span',{style:{fontSize:size,fontWeight:weight,color:T.text1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},children),
+    React.createElement('span',{style:{width:14,height:14,minWidth:14,borderRadius:"50%",background:T.purple,display:"inline-flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:10,fontWeight:950,lineHeight:1,flexShrink:0,boxSizing:"border-box",aspectRatio:"1 / 1"}},"✓"),
+    React.createElement(PkuBadge,{size:Math.max(32,Math.round(size*2.05))})
   );
 }
 function PriceBadge({rate}){
@@ -1002,13 +1009,15 @@ function ExploreScreen({ onSelectUser, navActive, onNav, likeState={}, onToggleL
             React.createElement('div',{style:{flex:1,minWidth:0}},
               React.createElement('div',{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:3}},
                 React.createElement('div',{style:{display:"flex",alignItems:"center",gap:7,minWidth:0}},
-                  React.createElement(PkuName,{verified:u.pkuVerified,size:15,weight:700},u.name),
+                  u.pkuOfficial?React.createElement(PkuOfficialName,{size:15,weight:700},u.name):React.createElement(PkuName,{verified:u.pkuVerified,size:15,weight:700},u.name),
                   u.isCeo?React.createElement('span',{style:{fontSize:10,background:"linear-gradient(90deg,#f59e0b,#ef4444)",color:"#fff",borderRadius:999,padding:"2px 8px",fontWeight:700}},"CEO"):null,
-                  u.pkuOfficial?React.createElement('span',{style:{fontSize:10,background:"rgba(140,21,21,.08)",color:PKU_RED,borderRadius:999,padding:"2px 8px",fontWeight:900}},"官方认证"):null,
                   u.service&&!u.pkuVerified?React.createElement('span',{style:{fontSize:10,background:T.grad,color:"#fff",borderRadius:999,padding:"2px 8px",fontWeight:700}},"咨询"):null
                 ),
                 React.createElement(LikeButton,{liked:lk.liked,count:lk.count,onToggle:()=>doLike(u)})
               ),
+              u.pkuOfficial?React.createElement('div',{style:{display:"flex",alignItems:"center",margin:"-1px 0 5px"}},
+                React.createElement('span',{style:{fontSize:11,color:T.text1,fontWeight:900,lineHeight:1.4}},"官方账号")
+              ):null,
               React.createElement('div',{style:{fontSize:12,color:T.text2,lineHeight:1.5,marginBottom:8,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}},u.bio),
               tab==="pku"&&u.pkuOfficial?React.createElement('div',{style:{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}},(u.tags||[]).map(t=>React.createElement(Tag,{key:t,label:t}))):null,
               tab==="pku"&&isPkuAlumni?React.createElement('div',{style:{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}},(u.tags||[]).map(t=>React.createElement(Tag,{key:t,label:t}))):null,
@@ -1220,9 +1229,10 @@ function DetailScreen({ user, onBack, onChat, onStartInterview, companyProfile, 
             user.id==="pku-mimi"?React.createElement(PkuAvatar,{size:68}):user.avatar?React.createElement('img',{src:user.avatar,style:{width:64,height:64,borderRadius:"50%",objectFit:"cover",flexShrink:0}}):React.createElement(CeoAvPlain,{seed:user.seed,bg:user.bg,size:64}),
             React.createElement('div',{style:{flex:1,minWidth:0}},
               React.createElement('div',{style:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:4}},
-                React.createElement(PkuName,{verified:user.pkuVerified,size:20,weight:800},user.name),
+                user.pkuOfficial?React.createElement(PkuOfficialName,{size:20,weight:800},user.name):React.createElement(PkuName,{verified:user.pkuVerified,size:20,weight:800},user.name),
                 React.createElement(LikeButton,{liked:lk.liked,count:lk.count,onToggle:doLike})
               ),
+              user.pkuOfficial?React.createElement('div',{style:{fontSize:12,color:T.text1,fontWeight:900,margin:"0 0 7px",lineHeight:1.4}},"官方账号"):null,
               React.createElement('div',{style:{fontSize:13,color:T.text2,lineHeight:1.6}},user.bioFull),
               user.pkuOfficial?React.createElement('div',{style:{display:"flex",flexWrap:"wrap",gap:6,marginTop:12}},(user.tags||[]).map(t=>React.createElement(Tag,{key:t,label:t,outline:true}))):null,
               isPkuAlumni?React.createElement('div',{style:{display:"flex",flexWrap:"wrap",gap:6,marginTop:12}},(user.tags||[]).map(t=>React.createElement(Tag,{key:t,label:t,outline:true}))):null,
