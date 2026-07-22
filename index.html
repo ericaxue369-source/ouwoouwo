@@ -928,18 +928,33 @@ function InviteModal({ user, onSuccess, onClose }) {
 function PkuAuthSheet({ onSuccess, onClose }) {
   const [form,setForm]=useState({email:"",code:"",sent:false,error:""});
   const [count,setCount]=useState(0);
-  useEffect(()=>{ if(count<=0) return; const t=setInterval(()=>setCount(c=>Math.max(0,c-1)),1000); return ()=>clearInterval(t); },[count]);
+  const [sending,setSending]=useState(false);
+  const [codeExpired,setCodeExpired]=useState(false);
+  useEffect(()=>{ if(count<=0){ if(form.sent&&!codeExpired) setCodeExpired(true); return; } const t=setInterval(()=>setCount(c=>Math.max(0,c-1)),1000); return ()=>clearInterval(t); },[count,form.sent,codeExpired]);
   const update=(k,v)=>setForm(p=>({...p,[k]:v,error:k==="error"?v:""}));
   const emailOk=PKU_EMAIL_RE.test((form.email||"").trim());
   const sendCode=()=>{
     if(!emailOk){ update("error",PKU_EMAIL_ERROR); return; }
-    setForm(p=>({...p,sent:true,error:"验证码已发送，请查收邮箱"}));
-    setCount(60);
+    if(sending||count>0) return;
+    setSending(true);
+    setForm(p=>({...p,error:"正在发送验证码…"}));
+    setTimeout(()=>{
+      if((form.email||"").toLowerCase().includes("fail")){
+        setForm(p=>({...p,sent:false,error:"验证码发送失败，请检查网络后重试"}));
+      }else{
+        setForm(p=>({...p,sent:true,error:"验证码已发送，请查收邮箱"}));
+        setCodeExpired(false);
+        setCount(60);
+      }
+      setSending(false);
+    },550);
   };
   const submit=()=>{
     if(!emailOk){ update("error",PKU_EMAIL_ERROR); return; }
     if(!form.sent){ update("error","请先发送验证码"); return; }
+    if(codeExpired){ update("error","验证码已过期，请重新发送"); return; }
     if(!/^\d{6}$/.test((form.code||"").trim())){ update("error","请输入6位验证码"); return; }
+    if((form.code||"").trim()==="000000"){ update("error","验证码错误，请重新输入"); return; }
     const records=readEducationRecords();
     const next=records.some(r=>r.school==="北京大学") ? records : [...records,newEducationRecord({email:form.email.trim()})];
     writeEducationRecords(next);
@@ -960,7 +975,7 @@ function PkuAuthSheet({ onSuccess, onClose }) {
         React.createElement('div',{style:{fontSize:12,color:T.text2,lineHeight:1.7,marginBottom:12}},"请使用北京大学校园邮箱验证。在校生：xxx@pku.edu.cn / xxx@stu.pku.edu.cn；校友：xxx@alumni.pku.edu.cn"),
         React.createElement('div',{style:{display:"flex",gap:8,marginBottom:10}},
           React.createElement('input',{value:form.email,onChange:e=>update("email",e.target.value),placeholder:"name@pku.edu.cn",style:{flex:1,minWidth:0,border:"1px solid rgba(139,92,246,.18)",borderRadius:14,padding:"12px 13px",outline:"none",fontSize:13,color:T.text1,background:"#fff"}}),
-          React.createElement('button',{onClick:sendCode,disabled:count>0,style:{border:"none",borderRadius:14,padding:"0 12px",background:count>0?"#eee":"rgba(139,92,246,.12)",color:count>0?"#999":T.purple,fontSize:12,fontWeight:800,cursor:count>0?"default":"pointer",whiteSpace:"nowrap"}},count>0?count+"s":form.sent?"重发":"发送验证码")
+          React.createElement('button',{onClick:sendCode,disabled:count>0||sending,style:{border:"none",borderRadius:14,padding:"0 12px",background:count>0||sending?"#eee":"rgba(139,92,246,.12)",color:count>0||sending?"#999":T.purple,fontSize:12,fontWeight:800,cursor:count>0||sending?"default":"pointer",whiteSpace:"nowrap"}},sending?"发送中":count>0?count+"s":form.sent?"重发":"发送验证码")
         ),
         React.createElement('input',{value:form.code,onChange:e=>update("code",e.target.value.replace(/\D/g,"").slice(0,6)),placeholder:"输入6位验证码",style:{width:"100%",boxSizing:"border-box",border:"1px solid rgba(139,92,246,.18)",borderRadius:14,padding:"12px 13px",outline:"none",fontSize:13,color:T.text1,background:"#fff"}}),
         form.error?React.createElement('div',{style:{fontSize:12,color:form.error.includes("已发送")?"#059669":"#ef4444",fontWeight:700,marginTop:10}},form.error):null
@@ -2493,6 +2508,8 @@ function AvatarScreen({ onBack, onCreateKnowledge, knowledgeItems=[] }) {
     return {topic:hit.title,existing,recent};
   };
   const suggestion=inferKnowledge();
+  const hasKnowledgeCandidate=msgs.some(m=>m.side==="me"&&String(m.id).startsWith("u_"));
+  const matchedKnowledgeTitle=suggestion.existing&&(suggestion.existing.title||suggestion.topic);
   const pushPair = (text) => {
     const t=(text||"").trim(); if(!t) return;
     const reply = AVATAR_REPLY_MAP[t] || "收到！我已经记下来了，继续和我说说吧 ✨";
@@ -2503,10 +2520,11 @@ function AvatarScreen({ onBack, onCreateKnowledge, knowledgeItems=[] }) {
   };
   const saveKnowledge=()=>{
     const s=inferKnowledge();
-    const item={id:Date.now(),mode:s.existing?"merge":"create",targetId:s.existing&&s.existing.id,title:s.topic,desc:`根据你和 AI 分身的对话补充：${s.recent}。`,recent:s.recent,hours:0,attachments:0,source:"我的分身对话"};
+    const targetTitle=s.existing&&(s.existing.title||s.topic);
+    const item={id:Date.now(),mode:s.existing?"merge":"create",targetId:s.existing&&s.existing.id,title:s.existing?targetTitle:s.topic,desc:`根据你和 AI 分身的对话补充：${s.recent}。`,recent:s.recent,hours:0,attachments:0,source:"我的分身对话"};
     onCreateKnowledge&&onCreateKnowledge(item);
     setKnowledgeCardHidden(true);
-    setMsgs(prev=>[...prev,{id:"ai_save_"+Date.now(),side:"ai",text:s.existing?`已补充到「${s.topic}」知识条目，来源标注为“我的分身对话”。`:`已创建「${s.topic}」知识条目，后续可以在我的大脑继续训练。`}]);
+    setMsgs(prev=>[...prev,{id:"ai_save_"+Date.now(),side:"ai",text:s.existing?`已追加到已有知识「${targetTitle}」，不会新建重复条目。来源标注为“我的分身对话”。`:`已创建「${s.topic}」知识条目，后续可以在我的大脑继续训练。`}]);
   };
   const triggerSaveKnowledge=(e)=>{
     e&&e.preventDefault&&e.preventDefault();
@@ -2536,12 +2554,13 @@ function AvatarScreen({ onBack, onCreateKnowledge, knowledgeItems=[] }) {
               , React.createElement('div', { style:{maxWidth:"72%",padding:"11px 15px",fontSize:14,lineHeight:1.65,borderRadius:isMe?"20px 20px 4px 20px":"20px 20px 20px 4px",background:isMe?T.grad:"#ece8fb",color:isMe?"#fff":"#3b0764"} }, m.text)
             );
           })
-        , !knowledgeCardHidden&&React.createElement('div', { style:{alignSelf:"center",width:"92%",background:"#fff",border:"1px solid rgba(139,92,246,.14)",borderRadius:18,padding:"13px 14px",boxShadow:"0 8px 22px rgba(40,30,80,.06)"} }
+        , !knowledgeCardHidden&&hasKnowledgeCandidate&&React.createElement('div', { style:{alignSelf:"center",width:"92%",background:"#fff",border:"1px solid rgba(139,92,246,.14)",borderRadius:18,padding:"13px 14px",boxShadow:"0 8px 22px rgba(40,30,80,.06)"} }
           , React.createElement('div', { style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:6} }
             , React.createElement('div', { style:{fontSize:13,fontWeight:900,color:T.text1} }, "可沉淀到我的大脑")
-            , React.createElement('span', { style:{fontSize:10.5,color:suggestion.existing?"#059669":T.purple,background:suggestion.existing?"rgba(16,185,129,.1)":"rgba(139,92,246,.1)",borderRadius:999,padding:"3px 8px",fontWeight:900,flexShrink:0} }, suggestion.existing?"补充已有":"创建新知识")
+            , React.createElement('span', { style:{fontSize:10.5,color:suggestion.existing?"#059669":T.purple,background:suggestion.existing?"rgba(16,185,129,.1)":"rgba(139,92,246,.1)",borderRadius:999,padding:"3px 8px",fontWeight:900,flexShrink:0} }, suggestion.existing?"匹配已有":"创建新知识")
           )
-          , React.createElement('div', { style:{fontSize:11.5,color:T.text3,lineHeight:1.65,marginBottom:10} }, "已识别为：",React.createElement('span',{style:{color:T.text1,fontWeight:900}},suggestion.topic),"。",suggestion.existing?"将补充到已有知识条目。":"将创建新的知识条目。","来源标注为“我的分身对话”。")
+          , suggestion.existing&&React.createElement('div', { style:{fontSize:12,color:"#059669",fontWeight:900,marginBottom:5,lineHeight:1.55} }, "已匹配到已有知识：",matchedKnowledgeTitle)
+          , React.createElement('div', { style:{fontSize:11.5,color:T.text3,lineHeight:1.65,marginBottom:10} }, "已识别为：",React.createElement('span',{style:{color:T.text1,fontWeight:900}},suggestion.topic),"。",suggestion.existing?"确认后会追加到该知识条目，不会新建重复知识。":"未找到同类知识，将创建新的知识条目。","来源标注为“我的分身对话”。")
           , React.createElement('button', { onPointerDown:triggerSaveKnowledge,onClick:triggerSaveKnowledge,style:{position:"relative",zIndex:3,touchAction:"manipulation",border:"none",borderRadius:999,padding:"8px 13px",background:T.grad,color:"#fff",fontSize:12,fontWeight:900,cursor:"pointer"} }, suggestion.existing?"加入已有知识":"创建知识条目")
         )
         , React.createElement('div', { ref:bottomRef })
@@ -4697,12 +4716,14 @@ function EducationManageScreen({ onBack }){
   const [form,setForm]=useState({school:"北京大学",email:"",code:"",sent:false,error:""});
   const [count,setCount]=useState(0);
   const [detail,setDetail]=useState(null);
+  const [detailError,setDetailError]=useState("");
+  const [confirmReauth,setConfirmReauth]=useState(false);
   useEffect(()=>{ if(count<=0) return; const t=setInterval(()=>setCount(c=>Math.max(0,c-1)),1000); return ()=>clearInterval(t); },[count]);
   const persist=(next)=>{ setRecords(next); writeEducationRecords(next); };
   const update=(k,v)=>setForm(p=>({...p,[k]:v,error:""}));
-  const updateDetail=(k,v)=>setDetail(d=>({...d,[k]:v}));
+  const updateDetail=(k,v)=>{ setDetail(d=>({...d,[k]:v})); if(detailError) setDetailError(""); };
   const openAdd=()=>{ setForm({school:"北京大学",email:"",code:"",sent:false,error:""}); setCount(0); setMode("add"); };
-  const openDetail=(r)=>{ setSelectedId(r.id); setDetail(newEducationRecord(r)); setMode("detail"); };
+  const openDetail=(r)=>{ setSelectedId(r.id); setDetail(newEducationRecord(r)); setDetailError(""); setMode("detail"); };
   const goBack=()=>mode==="list"?onBack():setMode("list");
   const shell=(title,children,bg="#f7f7fa")=>React.createElement('div',{style:{position:"absolute",inset:0,background:bg,display:"flex",flexDirection:"column"}},
     React.createElement(StatusBar),
@@ -4724,9 +4745,17 @@ function EducationManageScreen({ onBack }){
     if(!form.school){setForm(p=>({...p,error:"请选择学校"}));return;}
     if(!PKU_EMAIL_RE.test(email)){setForm(p=>({...p,error:PKU_EMAIL_ERROR}));return;}
     if(!form.sent){setForm(p=>({...p,error:"请先发送验证码"}));return;}
+    if(count<=0){setForm(p=>({...p,error:"验证码已过期，请重新发送"}));return;}
     if(!/^\d{6}$/.test((form.code||"").trim())){setForm(p=>({...p,error:"请输入6位验证码"}));return;}
+    if((form.code||"").trim()==="000000"){setForm(p=>({...p,error:"验证码错误，请重新输入"}));return;}
+    if(records.some(r=>r.school==="北京大学")){setConfirmReauth(true);return;}
+    finishCertification();
+  };
+  const finishCertification=()=>{
+    const email=(form.email||"").trim();
     const record=newEducationRecord({school:"北京大学",email});
     persist([...records.filter(r=>r.school!=="北京大学"),record]);
+    setConfirmReauth(false);
     setMode("list");
   };
   const sendEducationCode=()=>{
@@ -4737,6 +4766,9 @@ function EducationManageScreen({ onBack }){
     setCount(60);
   };
   const saveDetail=()=>{
+    const start=Number(detail.startYear||0);
+    const end=Number(detail.endYear||0);
+    if(start&&end&&end<start){setDetailError("毕业年份不能早于入学年份，请检查后再保存");return;}
     const next=records.map(r=>r.id===selectedId?newEducationRecord({...r,...detail,school:r.school,verified:true,id:r.id,email:r.email}):r);
     persist(next);
     setMode("list");
@@ -4765,10 +4797,22 @@ function EducationManageScreen({ onBack }){
           ),
           React.createElement('div',{style:{fontSize:11.5,color:T.text3,lineHeight:1.75,margin:"0 12px 14px"}},"在校生：xxx@pku.edu.cn / xxx@stu.pku.edu.cn　校友：xxx@alumni.pku.edu.cn"),
           React.createElement('div',{style:{background:"rgba(139,92,246,.08)",border:"1px solid rgba(139,92,246,.14)",borderRadius:12,padding:"13px 14px",fontSize:11.8,color:T.text2,lineHeight:1.7}},"这里仅验证北京大学身份，不填写学历层次。认证成功后，可在教育经历详情中补充学历类型、在校状态、学院、专业和年份。"),
+          records.some(r=>r.school==="北京大学")&&React.createElement('div',{style:{background:"rgba(239,68,68,.07)",border:"1px solid rgba(239,68,68,.16)",borderRadius:12,padding:"12px 14px",fontSize:11.8,color:"#b91c1c",lineHeight:1.7,marginTop:10}},"你已存在北京大学认证。重新认证成功后，原教育详情会清空并回到“已认证 · 待完善”。"),
           form.error&&React.createElement('div',{style:{fontSize:12,color:form.error.includes("已发送")?"#059669":"#ef4444",fontWeight:800,margin:"12px 8px 0"}},form.error)
         ),
         React.createElement('div',{style:{position:"absolute",left:4,right:4,bottom:18}},
           React.createElement('button',{onClick:submit,style:{width:"100%",border:"none",borderRadius:10,padding:"14px 0",background:T.grad,color:"#fff",fontSize:14,fontWeight:900,cursor:"pointer"}},"完成认证")
+        ),
+        confirmReauth&&React.createElement('div',{style:{position:"absolute",inset:0,zIndex:600},onClick:()=>setConfirmReauth(false)},
+          React.createElement('div',{style:{position:"absolute",inset:0,background:"rgba(20,20,24,.38)",backdropFilter:"blur(8px)"}}),
+          React.createElement('div',{onClick:e=>e.stopPropagation(),style:{position:"absolute",left:26,right:26,top:"34%",background:"#fff",borderRadius:22,padding:"22px 18px 18px",boxShadow:"0 18px 48px rgba(30,24,60,.18)",textAlign:"center"}},
+            React.createElement('div',{style:{fontSize:17,fontWeight:950,color:T.text1,marginBottom:8}},"确认重新认证？"),
+            React.createElement('div',{style:{fontSize:12.5,color:T.text3,lineHeight:1.65,marginBottom:16}},"重新认证通过后，原有学历、学院、专业、年份和公开设置会清空。"),
+            React.createElement('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}},
+              React.createElement('button',{onClick:()=>setConfirmReauth(false),style:{border:"none",borderRadius:13,padding:"11px 0",background:"#f1f1f6",color:T.text2,fontSize:13,fontWeight:900,cursor:"pointer"}},"取消"),
+              React.createElement('button',{onClick:finishCertification,style:{border:"none",borderRadius:13,padding:"11px 0",background:T.grad,color:"#fff",fontSize:13,fontWeight:900,cursor:"pointer"}},"确认清空")
+            )
+          )
         )
       )
     );
@@ -4796,7 +4840,8 @@ function EducationManageScreen({ onBack }){
               visibilitySwitch(k)
             ))
           ),
-          React.createElement('div',{style:{fontSize:11.8,color:T.text3,lineHeight:1.75,margin:"12px 4px 0"}},"学校来自邮箱认证，不支持直接修改。学历类型和在校状态用于展示教育经历，可按当前真实情况填写；未毕业学生可选择“在读”，毕业年份可不填。")
+          React.createElement('div',{style:{fontSize:11.8,color:T.text3,lineHeight:1.75,margin:"12px 4px 0"}},"学校来自邮箱认证，不支持直接修改。学历类型和在校状态用于展示教育经历，可按当前真实情况填写；未毕业学生可选择“在读”，毕业年份可不填。"),
+          detailError&&React.createElement('div',{style:{fontSize:12,color:"#ef4444",fontWeight:800,margin:"10px 4px 0"}},detailError)
         ),
         React.createElement('div',{style:{position:"absolute",left:6,right:6,bottom:24}},
           React.createElement('button',{onClick:saveDetail,style:{width:"100%",border:"none",borderRadius:10,padding:"14px 0",background:T.grad,color:"#fff",fontSize:14,fontWeight:900,cursor:"pointer"}},"保存")
@@ -4815,7 +4860,7 @@ function EducationManageScreen({ onBack }){
       records.length?React.createElement('div',{style:{background:"#fff",borderRadius:22,padding:"0 16px",border:"1px solid rgba(139,92,246,.1)",boxShadow:"0 2px 16px rgba(139,92,246,.06)"}},
         records.map((r,i)=>{
           const grade=eduGradeLabel(r);
-          const eduSummary=[r.degree,r.studyStatus,grade].filter(Boolean).join(" · ") || "已认证 · 待完善";
+          const eduSummary=[r.degree,grade,r.college,r.major].filter(Boolean).join(" · ") || "已认证 · 待完善";
           return React.createElement('div',{key:r.id,onClick:()=>openDetail(r),style:{display:"flex",alignItems:"center",gap:12,padding:"17px 0",borderBottom:i<records.length-1?"1px solid rgba(0,0,0,.06)":"none",cursor:"pointer"}},
           React.createElement(PkuLogo,{size:34}),
           React.createElement('div',{style:{flex:1,minWidth:0}},React.createElement('div',{style:{fontSize:15,fontWeight:900,color:T.text1}},r.school),React.createElement('div',{style:{fontSize:12,color:T.text3,marginTop:3}},eduSummary)),
@@ -4834,7 +4879,9 @@ function SimplePhrasesScreen({ onBack }){
   const [custom,setCustom]=useState("");
   const [limit,setLimit]=useState(false);
   const [drag,setDrag]=useState(null);
+  const [tip,setTip]=useState("");
   useEffect(()=>{ writeQuickPhrases({public:publicList,private:privateList}); },[publicList,privateList]);
+  const showTip=(text)=>{setTip(text);setTimeout(()=>setTip(""),1500);};
   const recs={
     public:["了解你的经历","你的职业发展路径","你的创业经历","你的专业能力","你的观点和想法"],
     private:["总结我的近期状态","帮我制定计划","分析我的问题","整理我的知识","模拟一次沟通"],
@@ -4844,11 +4891,23 @@ function SimplePhrasesScreen({ onBack }){
   const openModal=(type)=>{ if(listOf(type).length>=5){setLimit(true);return;} setModal(type); setCustom(""); };
   const addPhrase=(text)=>{
     const val=(text||"").trim().slice(0,30);
-    if(!val||!modal) return;
+    if(!modal) return;
+    if(!val){showTip("请输入快捷语");return;}
     if(listOf(modal).length>=5){setLimit(true);setModal(null);return;}
+    if(listOf(modal).some(x=>x.trim()===val)){showTip("这条快捷语已存在");return;}
     setList(modal,p=>p.includes(val)?p:[...p,val]);
     setModal(null);
     setCustom("");
+    showTip("已添加快捷语");
+  };
+  const finishEdit=(type,i,prev)=>{
+    setList(type,p=>{
+      const raw=(p[i]||"").trim().slice(0,30);
+      const old=(prev||"").trim();
+      if(!raw){showTip("快捷语不能为空");return p.map((v,idx)=>idx===i?old:v);}
+      if(p.some((v,idx)=>idx!==i&&v.trim()===raw)){showTip("这条快捷语已存在");return p.map((v,idx)=>idx===i?old:v);}
+      return p.map((v,idx)=>idx===i?raw:v);
+    });
   };
   const move=(type,from,to)=>{
     if(from===to||from==null||to==null) return;
@@ -4860,13 +4919,13 @@ function SimplePhrasesScreen({ onBack }){
       React.createElement('span',{style:{fontSize:10,color:type==="public"?T.purple:"#0f766e",background:type==="public"?"rgba(139,92,246,.1)":"rgba(15,118,110,.08)",borderRadius:999,padding:"3px 8px",fontWeight:900}},badge)
     ),
     React.createElement('div',{style:{fontSize:12.5,color:T.text2,lineHeight:1.65,marginBottom:12}},desc),
-    list.map((x,i)=>React.createElement('div',{key:i,draggable:true,onDragStart:()=>setDrag({type,index:i}),onDragOver:e=>e.preventDefault(),onDrop:e=>{e.preventDefault(); if(drag&&drag.type===type) move(type,drag.index,i); setDrag(null);},style:{display:"flex",alignItems:"center",gap:8,background:"#f8f7ff",borderRadius:14,padding:"9px 10px",marginBottom:8,cursor:"grab"}},
-      React.createElement('input',{value:x,onChange:e=>setList(type,p=>p.map((v,idx)=>idx===i?e.target.value.slice(0,30):v)),style:{fontSize:13,color:T.text1,flex:1,minWidth:0,border:"none",outline:"none",background:"transparent"}}),
+    list.length?list.map((x,i)=>React.createElement('div',{key:i,draggable:true,onDragStart:()=>setDrag({type,index:i}),onDragOver:e=>e.preventDefault(),onDrop:e=>{e.preventDefault(); if(drag&&drag.type===type) move(type,drag.index,i); setDrag(null);},style:{display:"flex",alignItems:"center",gap:8,background:"#f8f7ff",borderRadius:14,padding:"9px 10px",marginBottom:8,cursor:"grab"}},
+      React.createElement('input',{value:x,onFocus:e=>{e.currentTarget.dataset.prev=x;},onBlur:e=>finishEdit(type,i,e.currentTarget.dataset.prev),onChange:e=>setList(type,p=>p.map((v,idx)=>idx===i?e.target.value.slice(0,30):v)),style:{fontSize:13,color:T.text1,flex:1,minWidth:0,border:"none",outline:"none",background:"transparent"}}),
       React.createElement('button',{onClick:()=>move(type,i,i-1),disabled:i===0,style:{border:"none",background:"transparent",color:i===0?"#ddd":T.purple,fontSize:12,fontWeight:900,cursor:i===0?"default":"pointer",padding:"2px 0"}},"↑"),
       React.createElement('button',{onClick:()=>move(type,i,i+1),disabled:i===list.length-1,style:{border:"none",background:"transparent",color:i===list.length-1?"#ddd":T.purple,fontSize:12,fontWeight:900,cursor:i===list.length-1?"default":"pointer",padding:"2px 0"}},"↓"),
       React.createElement('button',{onClick:()=>setList(type,p=>p.filter((_,idx)=>idx!==i)),style:{border:"none",background:"transparent",color:"#aaa",fontSize:12,fontWeight:800,cursor:"pointer"}},"删除")
-    )),
-    React.createElement('button',{onClick:()=>openModal(type),style:{border:"1px solid rgba(139,92,246,.22)",background:list.length>=5?"#ececf2":"rgba(139,92,246,.06)",color:list.length>=5?"#a8a8b5":T.purple,borderRadius:999,padding:"8px 14px",fontSize:12,fontWeight:900,cursor:"pointer"}},"+ 添加快捷语")
+    )):React.createElement('div',{style:{textAlign:"center",padding:"22px 10px",background:"#f8f7ff",borderRadius:14,color:T.text3,fontSize:12.5,marginBottom:10}},"暂无快捷话术，添加后会同步到对应聊天入口"),
+    React.createElement('button',{onClick:()=>openModal(type),style:{border:"1px solid rgba(139,92,246,.22)",background:list.length>=5?"#ececf2":"rgba(139,92,246,.06)",color:list.length>=5?"#a8a8b5":T.purple,borderRadius:999,padding:"8px 14px",fontSize:12,fontWeight:900,cursor:list.length>=5?"not-allowed":"pointer"}},"+ 添加快捷语")
   );
   const addSheet=modal&&React.createElement('div',{style:{position:"absolute",inset:0,zIndex:500},onClick:()=>setModal(null)},
     React.createElement('div',{style:{position:"absolute",inset:0,background:"rgba(20,20,24,.38)",backdropFilter:"blur(8px)"}}),
@@ -4881,7 +4940,7 @@ function SimplePhrasesScreen({ onBack }){
       ),
       React.createElement('div',{style:{display:"flex",gap:10,alignItems:"center",background:"#f7f7fa",borderRadius:13,padding:"8px 10px"}},
         React.createElement('input',{value:custom,maxLength:30,onChange:e=>setCustom(e.target.value.slice(0,30)),placeholder:"也可以输入自定义快捷语",style:{flex:1,minWidth:0,border:"none",outline:"none",background:"transparent",fontSize:12.8,color:T.text1}}),
-        React.createElement('button',{onClick:()=>addPhrase(custom),style:{border:"none",borderRadius:999,padding:"8px 12px",background:custom.trim()?T.grad:"#dadae6",color:"#fff",fontSize:12,fontWeight:900,cursor:"pointer"}},"添加")
+        React.createElement('button',{onClick:()=>custom.trim()?addPhrase(custom):showTip("请输入快捷语"),style:{border:"none",borderRadius:999,padding:"8px 12px",background:custom.trim()?T.grad:"#dadae6",color:"#fff",fontSize:12,fontWeight:900,cursor:"pointer"}},"添加")
       )
     )
   );
@@ -4905,7 +4964,8 @@ function SimplePhrasesScreen({ onBack }){
       card("private","我的分身助手","私人使用","你和分身助手对话时，对话输入框上部一键唤起指令，最多添加 5 条",privateList)
     ),
     addSheet,
-    limitModal
+    limitModal,
+    React.createElement(Toast,{text:tip})
   );
 }
 
